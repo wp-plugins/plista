@@ -3,14 +3,14 @@
 	Plugin Name: plista
 	Plugin URI: http://www.plista.com
 	Description: Plugin for displaying plista RecommendationAds
-	Version: 1.3.6
+	Version: 1.4.0
 	Author: wordpress@plista.com
 	Author URI: http://www.plista.com
 	***/
 
 class plista {
 
-	const VERSION = '1.3.6';
+	const VERSION = '1.4.0';
 
 	/**
 	 * combatibilitycheck 
@@ -80,7 +80,6 @@ class plista {
 		}
 	}
 
-
 	/**
 	 * set adminpage if user is actually current admin
 	 *
@@ -88,8 +87,8 @@ class plista {
 	 */
 	public function plista_admin_actions() {
 		if( current_user_can('level_10')) {
-			wp_enqueue_script( 'plista-admin', plugins_url('/js/plista-admin.js', __FILE__), array(), '1.3' );
-			wp_enqueue_style( 'plista-admin', plugins_url('/css/plista-admin.css', __FILE__), array(), '1.3' );
+			wp_enqueue_script( 'plista-admin', plugins_url('/js/plista-admin.js', __FILE__), array(), '1.4' );
+			wp_enqueue_style( 'plista-admin', plugins_url('/css/plista-admin.css', __FILE__), array(), '1.4' );
 			add_options_page('plista', 'plista', 1, 'plista', array(__CLASS__, 'plista_admin'));
 		}
 
@@ -201,6 +200,7 @@ class plista {
 
 							.itemMore {color: ".$txtcolor." !important;}
 
+							.plistaList a:hover,
 							.plistaWidgetList a:hover,
 							.plistaWidgetList a:active,
 							.plistaWidgetList a:focus{background-color:  ".$txthover."  !important}
@@ -247,11 +247,9 @@ class plista {
 	public function plista_content( $plista_data ) {
 
 		$widgetname = get_option( 'plista_widgetname' );  
-       	$jspath = get_option( 'plista_jspath' );
+       	$publickey = get_option( 'plista_publickey' );
 		
-		$setpicads = get_option( 'plista_setpicads' );
 		$setblacklist = get_option( 'plista_setblacklist' );
-		$blacklistpicads = get_option( 'plista_blacklistpicads' );
 		$blacklistrecads = get_option( 'plista_blacklistrecads' );
 		$tags = get_option( 'plista_tags' );
 		$tag_ID = array();
@@ -265,8 +263,17 @@ class plista {
 			$istag = '';
 		}
 
+		$post_types = get_option( 'plista_post_types' );
+		$post_type_current = get_post_type();
+		if (is_array($post_types) && in_array($post_type_current, $post_types)) {
+			$is_posttype = $post_types;
+		} else if ($post_types == $post_type_current) {
+			$is_posttype = $post_types;
+		} else {
+			$is_posttype = '';
+		}
+
 		$categories = get_option( 'plista_categories' );
-		$mobile_categories = get_option( 'plista_mobile_categories' );
 		$cat_ID = array();
 		$post_categories = get_the_category();
 		if (isset($post_categories)) {
@@ -274,32 +281,26 @@ class plista {
 				array_push($cat_ID,$category->cat_ID);
 			}
 			$iscategory = is_array($categories) ? array_intersect($cat_ID, $categories) : '';
-			$ismobilecategory = is_array($mobile_categories) ? array_intersect($cat_ID, $mobile_categories) : '';
 		} else {
 			$iscategory = '';
-			$ismobilecategory = '';
 		}
 
-		$plistapicads = '';
 		$postid = get_the_ID();
-		$ispiclist = array_search((string)$postid, explode(',', $blacklistpicads));
 		$isreclist = array_search((string)$postid, explode(',', $blacklistrecads));
 
 		if (!self::plista_ismobile()) {
-			if ($setpicads == 'checked="checked"' && $ispiclist === false && empty($ismobilecategory)) {
-				$plistapicads = 'PLISTA.pictureads.enable(true);';
-			}
-			$plistapush = 'PLISTA.items.push('.json_encode($plista_data).');';
+			$plistapush = ',item:'.json_encode($plista_data);
 		}
 
 		//blacklist some pages where widget should never be shown
-		if ($isreclist === false && empty($iscategory) && empty($istag) && empty($ismobilecategory)) {
+		if ($isreclist === false && empty($iscategory) && empty($is_posttype) && empty($istag)) {
 			if(strpos($_SERVER['REQUEST_URI'], '/attachment/') == false) {
 				if((is_single() || is_page()) &&
 					!is_attachment() &&
 					!is_admin() &&
-					get_post_status() != 'private' &&
+					get_post_status() == 'publish' &&
 					!post_password_required() &&
+					!wp_is_post_revision($postid) &&
 					!is_404() &&
 					!is_preview() &&
 					!is_feed() &&
@@ -307,16 +308,22 @@ class plista {
 					!is_archive() &&
 					!is_search()) {
 
-					return '<!-- plista wp Version '.self::plista_version().' --><div id="'.$widgetname.'"></div>
-					<script type="text/javascript" src="'.$jspath.'"></script>
+					return '<!-- plista wp Version '.self::plista_version().' --><div data-widget="'.$widgetname.'"></div>
 					<script type="text/javascript">
-						'.$plistapush.'
-						'.$plistapicads.'
-						PLISTA.partner.init();
+						if (!window.PLISTA || !PLISTA.publickey) {
+							window.PLISTA = {
+								publickey: "'.$publickey.'"
+								'.$plistapush.'
+							};
+						}
+						(function(){var n="script",d=document,s=d.createElement(n),s0=d.getElementsByTagName(n)[0]; 
+						s.async="async";s.type="text/javascript";s.src=(d.location.protocol==="https:"?"https:":"http:")+"//static.plista.com/async.js";
+						s0.parentNode.insertBefore(s,s0)}());
 					</script>';
-				}
+				} 
 			} 
-		}
+		} 
+			
 	}
 
 	/**
@@ -340,6 +347,21 @@ class plista {
 		$id = get_the_id();
 		$youtubepattern = "/http:\/\/www\.youtube\.com\/(v|embed)\/([1-9|_|A-z]+)/";
 		$isyoutube = preg_match($youtubepattern, $post->post_content);
+
+		// get all categories, max 30 and only parent categories
+		$categories = get_the_category();
+		$separator = ',';
+		$output = '';
+		if($categories){
+			$catcount = 0;
+			foreach($categories as $category) {
+				if (($category->category_parent) == 0 && ($catcount < 30)) {
+					$catcount++;
+					$output .= $category->cat_name.$separator;
+				}
+			}
+			$categories = trim($output, $separator);
+		}
 		
 		// first try to get the article thumbnail image
 		if ( function_exists('has_post_thumbnail') && has_post_thumbnail($id) ) {
@@ -380,7 +402,9 @@ class plista {
 			'title' => get_the_title(),
 			'text' => $text,
 			'url' => get_permalink(),
-			'img' => $imgsrc
+			'img' => $imgsrc,
+			'category' => $categories,
+			'created_at' => get_the_time('U', true)
 		));
 
 		return $content;
