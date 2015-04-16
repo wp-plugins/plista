@@ -46,7 +46,7 @@ PHP5 is required for the use of this Plugin
 9. Go back to your Wordpress Admin and click "plista" under the navigation item settings. Now enter the widget name and public key under the basic settings and save.
 10. Further modifications for the widget can be done here if wished. / If you want you can also make additional settings in your widget here.
 11. Please insert the following in your theme file(e.g. single.php), in case you checked the box for Auto insert.
-'<?php if (class_exists('plista')) { echo plista::plista_integration ($content); } ?>'
+`<?php if (class_exists('plista')) { echo plista::plista_integration ($content); } ?>`
 12. The plista plugin is now active and can be used.
 
 == Frequently Asked Questions ==
